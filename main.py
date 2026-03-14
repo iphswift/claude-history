@@ -221,6 +221,7 @@ def run_hook() -> None:
     new_msg = f"{original_msg}\n\nConversation history: {relative_path}"
 
     env = {**os.environ, HOOK_GUARD_ENV: "1"}
+    subprocess.run(["git", "add", output_path], check=True)
     subprocess.run(
         ["git", "commit", "--amend", "-m", new_msg],
         env=env, check=True,
