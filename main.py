@@ -212,14 +212,16 @@ def run_hook() -> None:
     output_path = os.path.join(conv_dir, f"{short_hash}.md")
     write_conversation_md(output_path, project_path=project_path, cutoff=cutoff)
 
-    # Amend the commit message to include a relative link to the conversation file
-    relative_path = os.path.join(CONVERSATIONS_DIR, f"{short_hash}.md")
     original_msg = subprocess.run(
         ["git", "log", "-1", "--format=%B"],
         capture_output=True, text=True, check=True,
     ).stdout.rstrip()
 
-    new_msg = f"{original_msg}\n\nConversation: {relative_path}"
+    # Read the conversation text written to the markdown file
+    with open(output_path) as f:
+        conversation_text = f.read().strip()
+
+    new_msg = f"{original_msg}\n\n{conversation_text}"
 
     env = {**os.environ, HOOK_GUARD_ENV: "1"}
     subprocess.run(
