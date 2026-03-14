@@ -217,11 +217,8 @@ def run_hook() -> None:
         capture_output=True, text=True, check=True,
     ).stdout.rstrip()
 
-    # Read the conversation text written to the markdown file
-    with open(output_path) as f:
-        conversation_text = f.read().strip()
-
-    new_msg = f"{original_msg}\n\n{conversation_text}"
+    relative_path = os.path.relpath(output_path, project_path)
+    new_msg = f"{original_msg}\n\nConversation history: {relative_path}"
 
     env = {**os.environ, HOOK_GUARD_ENV: "1"}
     subprocess.run(
