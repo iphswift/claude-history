@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import glob
 import json
 import os
@@ -323,7 +324,8 @@ python3 "{script_path}" --hook
     print(f"Installed post-commit hook at {hook_path}")
 
 
-if __name__ == "__main__":
+def cli() -> None:
+    """Entry point for the `chistory` command."""
     if "--hook" in sys.argv:
         run_hook()
     elif "--install" in sys.argv:
@@ -334,3 +336,7 @@ if __name__ == "__main__":
         # Manual run: write conversation.md from last commit to cwd
         output = write_conversation_md("conversation.md")
         print(f"Written to {output}")
+
+
+if __name__ == "__main__":
+    cli()
