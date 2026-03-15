@@ -56,7 +56,7 @@ Run the following from inside the git project you want to track:
 chistory --install
 ```
 
-This writes `.git/hooks/post-commit` in the target project and makes it executable. The hook calls `main.py` on every commit.
+This writes `.git/hooks/post-commit` in the target project and makes it executable. The hook calls `chistory` on every commit.
 
 To install the hook for the `claude-history` repo itself:
 
@@ -127,5 +127,5 @@ your-project/
 │   └── .reset        # optional reset timestamp (written by --reset)
 └── .git/
     └── hooks/
-        └── post-commit   # installed by main.py --install
+        └── post-commit   # installed by chistory --install
 ```
