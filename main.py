@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 
 CONVERSATIONS_DIR = ".claude-history"
 HOOK_GUARD_ENV = "GIT_CLAUDE_HISTORY_HOOK"
+RESET_FILE = ".claude-history/.reset"
 
 
 def find_project_jsonl_files(project_path: str = None) -> list[str]:
@@ -60,6 +61,51 @@ def get_commit_timestamp(project_path: str = None, revision: str = "HEAD") -> fl
         return 0.0
 
 
+def get_reset_timestamp(project_path: str = None) -> float:
+    """Return the Unix timestamp stored in the reset marker file, or 0.0 if absent."""
+    if project_path is None:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=True,
+            )
+            project_path = result.stdout.strip()
+        except subprocess.CalledProcessError:
+            project_path = os.getcwd()
+
+    reset_path = os.path.join(project_path, RESET_FILE)
+    try:
+        with open(reset_path) as f:
+            return float(f.read().strip())
+    except (OSError, ValueError):
+        return 0.0
+
+
+def run_reset(project_path: str = None) -> None:
+    """Write the current timestamp to the reset marker file.
+
+    Future runs will ignore any conversation messages recorded before this moment.
+    """
+    if project_path is None:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                capture_output=True, text=True, check=True,
+            )
+            project_path = result.stdout.strip()
+        except subprocess.CalledProcessError:
+            project_path = os.getcwd()
+
+    reset_path = os.path.join(project_path, RESET_FILE)
+    os.makedirs(os.path.dirname(reset_path), exist_ok=True)
+    ts = datetime.now(timezone.utc).timestamp()
+    with open(reset_path, "w") as f:
+        f.write(str(ts))
+
+    human_ts = datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"[claude-history] Reset timestamp set to {human_ts}. Messages before this will be ignored.")
+
+
 def messages_since_last_commit(project_path: str = None, cutoff: float = None) -> list[str]:
     """Return formatted strings for every user message and assistant response
     recorded in the project's JSONL files since the last git commit.
@@ -89,6 +135,8 @@ def messages_since_last_commit(project_path: str = None, cutoff: float = None) -
 
     if cutoff is None:
         cutoff = get_commit_timestamp(project_path, "HEAD")
+
+    cutoff = max(cutoff, get_reset_timestamp(project_path))
 
     jsonl_files = find_project_jsonl_files(project_path)
 
@@ -216,8 +264,12 @@ def run_hook() -> None:
     ).stdout.strip()
     short_hash = commit_hash[:8]
 
-    # Cutoff is the commit before this one so we capture only what changed
-    cutoff = get_commit_timestamp(project_path, "HEAD~1")
+    # Cutoff is the commit before this one so we capture only what changed,
+    # or the reset timestamp if it's more recent.
+    cutoff = max(
+        get_commit_timestamp(project_path, "HEAD~1"),
+        get_reset_timestamp(project_path),
+    )
 
     conv_dir = os.path.join(project_path, CONVERSATIONS_DIR)
     output_path = os.path.join(conv_dir, f"{short_hash}.md")
@@ -276,6 +328,8 @@ if __name__ == "__main__":
         run_hook()
     elif "--install" in sys.argv:
         install_hook()
+    elif "--reset" in sys.argv or (len(sys.argv) > 1 and sys.argv[1] == "reset"):
+        run_reset()
     else:
         # Manual run: write conversation.md from last commit to cwd
         output = write_conversation_md("conversation.md")
