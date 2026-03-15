@@ -1,6 +1,7 @@
 import glob
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -91,10 +92,11 @@ def messages_since_last_commit(project_path: str = None, cutoff: float = None) -
 
     jsonl_files = find_project_jsonl_files(project_path)
 
-    # Collect qualifying entries; for assistant messages keep the last entry
-    # per message id (streaming sends incremental updates, final has stop_reason).
+    # Collect qualifying entries; for assistant messages accumulate text across
+    # all streaming chunks (each entry may only contain a partial delta), and
+    # mark complete once stop_reason appears.
     user_entries = []   # (timestamp_float, uuid, text)
-    asst_by_id = {}     # message_id -> (timestamp_float, uuid, message_dict)
+    asst_by_id = {}     # message_id -> {"ts", "uuid", "parts": [str], "done": bool}
 
     for path in jsonl_files:
         with open(path) as f:
@@ -126,26 +128,35 @@ def messages_since_last_commit(project_path: str = None, cutoff: float = None) -
                         text = "\n".join(parts)
                     else:
                         continue
+                    text = re.sub(r"<[^>]*>.*?</[^>]*>", "", text, flags=re.DOTALL)
+                    text = re.sub(r"<[^>]+>", "", text)
                     if text.strip():
                         user_entries.append((ts, entry["uuid"], text.strip()))
 
                 elif entry_type == "assistant":
                     msg = entry.get("message", {})
-                    if msg.get("stop_reason"):  # only final (non-streaming) entries
-                        msg_id = msg.get("id", entry["uuid"])
-                        asst_by_id[msg_id] = (ts, entry["uuid"], msg)
+                    msg_id = msg.get("id", entry["uuid"])
+                    chunk_parts = [
+                        block.get("text", "")
+                        for block in msg.get("content", [])
+                        if block.get("type") == "text"
+                    ]
+                    chunk_text = "\n".join(chunk_parts)
+                    if msg_id not in asst_by_id:
+                        asst_by_id[msg_id] = {"ts": ts, "uuid": entry["uuid"], "parts": [], "done": False}
+                    if chunk_text:
+                        asst_by_id[msg_id]["parts"].append(chunk_text)
+                    if msg.get("stop_reason"):
+                        asst_by_id[msg_id]["done"] = True
 
-    # Extract text from final assistant messages
+    # Extract text from completed assistant messages
     asst_entries = []
-    for ts, uuid, msg in asst_by_id.values():
-        parts = [
-            block.get("text", "")
-            for block in msg.get("content", [])
-            if block.get("type") == "text"
-        ]
-        text = "\n".join(parts).strip()
+    for acc in asst_by_id.values():
+        if not acc["done"]:
+            continue
+        text = "\n".join(acc["parts"]).strip()
         if text:
-            asst_entries.append((ts, uuid, text))
+            asst_entries.append((acc["ts"], acc["uuid"], text))
 
     # Merge and sort by timestamp
     all_entries = (
