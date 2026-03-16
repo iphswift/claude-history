@@ -56,6 +56,12 @@ Run the following from inside the git project you want to track:
 chistory --install
 ```
 
+Then start listening so the hook knows to capture conversation history:
+
+```bash
+chistory listen
+```
+
 This writes `.git/hooks/post-commit` in the target project and makes it executable. The hook calls `chistory` on every commit.
 
 To install the hook for the `claude-history` repo itself:
@@ -79,25 +85,69 @@ The commit message will be amended to include:
 Conversation history: .claude-history/<hash>.md
 ```
 
-## Manual usage
+## Commands
 
-To generate `conversation.md` from messages since the last commit without committing:
+```
+chistory help
+```
+Print a summary of all commands.
 
-```bash
+---
+
+```
+chistory listen
+chistory silent
+```
+Start or stop capturing conversation history. The hook only saves messages that fall inside a listen→silent window. You must run `listen` at least once before any history is recorded.
+
+---
+
+```
+chistory preview
+chistory preview --full
+```
+`preview` shows what would be saved on the next commit (respects listen/silent windows).
+`preview --full` shows every message since the last commit with inclusion markers: `CH[N-o]` (will be included) or `CH[N-x]` (will be excluded).
+
+---
+
+```
+chistory include <id>
+chistory exclude <id>
+chistory include <x>..<y>
+chistory exclude <x>..<y>
+chistory include --all
+chistory exclude --all
+```
+Force-include or force-exclude individual messages by their id from `preview --full`. Ranges (`x..y`) and `--all` are also supported. Force-include overrides listen/silent windows; force-exclude suppresses messages even if they are inside a window.
+
+---
+
+```
+chistory reset
+```
+Ignore all conversation history recorded before the current moment. Useful for starting fresh without losing existing commit history. Writes a timestamp to `.claude-history/.reset`.
+
+---
+
+```
 chistory
 ```
+Write `conversation.md` in the current directory from messages since the last commit (no commit required).
 
-This writes `conversation.md` in the current directory.
+---
 
-## Resetting the conversation window
-
-To ignore all conversation history recorded before the current moment:
-
-```bash
-chistory --reset
 ```
+chistory version
+```
+Print the current version.
 
-This writes a Unix timestamp to `.claude-history/.reset`. On all future runs (both the hook and manual usage), any messages older than this timestamp are excluded. This is useful for starting fresh without losing existing commit history.
+---
+
+```
+chistory --install
+```
+Install the post-commit hook into the current git project.
 
 The reset file is not committed automatically — add it to your repository if you want the reset to persist for other contributors.
 
